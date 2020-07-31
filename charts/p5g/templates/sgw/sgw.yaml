@@ -1,0 +1,125 @@
+{{/*
+Creates SGWs for each entry in .Vales.epcGroups.
+Each SGW is considered as a unique service and will be deployed to the node with the appropriate
+label set. This label is defined as follows:
+  - The label name is .Value.epcNodeLabel
+  - The value of the label is .Value.epcGroups.name  
+The SGW configuration file is derived from the same ConfigMap. However, the file is generated 
+dynamically by the initContainer as it contains an "advertise_addr" element which will be set to the
+IP of the node to which the worload is deployed. This information is used by the mme to provide the 
+eNB with the correct gtp-u IP address.
+The SGW will have port 2152 on the host forwarded to port 2152 in the pod. gtp-c is only used 
+within the cluster.
+The pod contains a configChecksum annotation computed from the sgw-conf.yaml file which will
+cause the SGW to be restarted so that the new configuraiton will be consumed.
+The SGW is not dependent on the existence of any other epc nodes in order to start up.
+*/}}
+
+{{/* Creates unique name for the SGW nodes. Parameters: dict .root <$> .name <.Values.epcGroups> */}}
+{{- define "p5g.sgwName" -}}
+{{- print  (include "p5g.fullname" .root) "-sgw-" .name}}
+{{- end -}}
+
+{{/* Creates labels for the SGW nodes. Parameters: dict .root <$> .name <.Values.epcGroups> */}}
+{{- define "p5g.sgwLabels" -}}
+epcNode: "sgw- {{- .name }}"
+epcNodeType: "sgw"
+epcGroup: {{ .name | quote }}
+{{ include "p5g.labels" .root }}
+{{- end -}}
+
+{{/* Creates selector labels for the SGW nodes. Parameters: dict .root <$> .name <.Values.epcGroups> */}}
+{{- define "p5g.sgwSelectorLabels" -}}
+{{ include "p5g.selectorLabels" .root }}
+epcNode: "sgw- {{- .name }}"
+{{- end -}}
+
+{{/* Loop over the epc groups and create a sgw deployment yaml for each */}}
+{{ range .Values.epcGroups }}
+{{ $ctx := dict "root" $ "name" .name }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "p5g.sgwName" $ctx | quote }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "p5g.sgwLabels" $ctx | nindent 4 }}
+spec:
+  selector:
+    {{- include "p5g.sgwSelectorLabels" $ctx | nindent 4 }}
+  clusterIP: None
+  ports:
+    - name: gtp-u
+      protocol: UDP
+      port: 2152
+    - name: gtp-c
+      protocol: UDP
+      port: 2123
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "p5g.sgwName" $ctx }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "p5g.sgwLabels" $ctx | nindent 4}}
+spec:
+  replicas: 1
+  serviceName: {{ include "p5g.sgwName" $ctx }}
+  selector:
+    matchLabels:
+      {{- include "p5g.sgwSelectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "p5g.sgwLabels" $ctx | nindent 8 }}
+      annotations:
+        configChecksum: {{ include (print $.Template.BasePath "/sgw/sgw-conf.yaml") $ | sha256sum }}
+    spec:
+      nodeSelector:
+        {{ $.Values.epcNodeLabel }}: "{{ .name }}"
+      initContainers:
+        - name: make-config
+          image: tores/ubuntu-gettext:18.04
+          command: ["bash", "/config-script/files-from-templates.sh"]
+          env:
+            - name: TEMPLATE_DIR
+              value: /config-templates
+            - name: CONFIG_DIR
+              value: /config-files
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          volumeMounts:
+            - name: config-files
+              mountPath: /config-files
+            - name: config-templates
+              mountPath: /config-templates
+              readOnly: true
+            - name: config-script
+              mountPath: /config-script
+              readOnly: true
+      containers:
+        - name: sgw
+          image: tores/open5gs:0.1.1-universal
+          command: ["open5gs-sgwd", "-c", "/config-files/sgw.yaml"]
+          volumeMounts:
+            - name: config-files
+              mountPath: /config-files
+          ports:
+            - name: s1u
+              protocol: UDP
+              hostPort: 2152
+              containerPort: 2152
+      volumes:
+        - name: config-files
+          emptyDir: {}
+        - name: config-templates
+          configMap:
+            name: {{ include "p5g.sgw.configName" $ | quote }}
+        - name: config-script
+          configMap:
+            name: files-from-templates
+{{ end }}

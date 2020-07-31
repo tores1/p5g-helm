@@ -1,0 +1,84 @@
+{{/*
+Create HSS'es as a Deployment.
+There are two configuration files for HSS; one for the application and
+one for diameter. The application configuration contains a reference to 
+the mongo database (single) instance. The Diameter configuration has a 
+reference to all MME nodes deployed including their unique diameter names.
+The diameter configuration for the HSS instances are the same as are the
+certificates.
+
+The pod contains an initcontainer that awaits the availability of the mongo
+database prior to starting the HSS application to avoid errors on startup.
+*/}}
+{{- define "p5g.hssName" -}}
+{{- print (include "p5g.fullname" . ) "-hss" -}}
+{{- end -}}
+
+{{- define "p5g.hssLabels" -}}
+epcNodeType: hss
+{{ include "p5g.labels" . }}
+{{- end -}}
+
+{{- define "p5g.hssSelectorLabels" -}}
+epcNodeType: hss
+{{ include "p5g.selectorLabels" . }}
+{{- end -}}
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "p5g.hssName" . | quote }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "p5g.hssLabels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "p5g.hssSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: s6a
+      protocol: TCP
+      port: 3868
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "p5g.hssName" . | quote }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "p5g.hssLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "p5g.hssSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "p5g.hssLabels" . | nindent 8 }}
+      annotations:
+        configChecksum: {{ cat (include (print $.Template.BasePath "/hss/hss-config.yaml") .) (include (print $.Template.BasePath "/hss/hss-diameter-config.yaml") .) | sha256sum }}
+    spec:
+      initContainers:
+        - name: wait-for-mongodb
+          image: busybox:1.28.4 # solve issue with nslookup
+          command: ['sh', '-c']
+          args:
+            - until nslookup {{ include "p5g.mongodbName" . }}; do echo [INFO] waiting for mongodb; sleep 2; done;
+      containers:
+        - name: hss
+          image: tores/open5gs:0.1.1-universal
+          command: ["open5gs-hssd", "-c", "/config-files/hss.yaml"]
+          volumeMounts:
+            - name: hss-config
+              mountPath: /config-files/hss.yaml
+              subPath: hss.yaml
+            - name: hss-diameter
+              mountPath: /config-files/hss-diameter.conf
+              subPath: hss-diameter.conf
+      volumes:
+        - name: hss-config
+          configMap:
+            name: {{ include "p5g.hss.configName" . }}
+        - name: hss-diameter
+          configMap:
+            name: {{ include "p5g.hss.diameterConfigName" . }}

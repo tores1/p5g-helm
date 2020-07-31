@@ -1,0 +1,103 @@
+{{/*
+Creates certificates for the FreeDiameter application. The certificates need to be installed
+and have the diameter name of the node as its CN or the application will not start.
+As multiple PGW and MME may contact the same instance of the PCRF and HSS (respectively)
+these nodes must have unique names (and thus unique certificates) or the PCRF/HSS will
+see two nodes with the same name but with different IP adresses trying to connect.
+
+If TLS is desired to secure S6a and rx, we need to generate certificates from a proper
+CA so that the same CA can be used across both the connecting and terminating nodes.
+
+Note that the HSS/PCRF are not set to connect to the corresponding MME and PGW and will
+only accept incoming connections.
+
+The secrets have config checksums of the diameter configuration files so that if the
+file changes, the certificates will re-generate in case the diameter name was changed.
+Note that a new CA is also created which will cause all secrets generated in this 
+template to be updated. However, as these certificates are only inspected on application
+startup and not used for any TLS verification 
+
+*/}}
+
+{{- define "p5g.ca.key" -}}
+-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEAwZ2bRxYG+5p/9E9agnO1JEPaBV95CGmIGMBvV8XF5SCZmyaU
+frnPT14UwNsrbB3uWEGe92QJwp/Kyj3waXKRIx2x47MG5HAECudReAjSds0aAyVj
+6VVQA1yGzvJuBYSUOGamaVRJ6goylXQMAXfU9ae3HKR5KA7iLmbCrDkQMeObSJia
+cB2d1AP11ImdyYuN5F24Rcd9RARd4rdYp9QW82V/PaLhaz+yPscE6TbZSOAz/lVD
+xdre28oQaid0sS83gjAja2+asECdlNXHXthqrhO/RqMdnU8prV55BhI916UxYEf3
+Szs7Yl1pHQzIVixHibRjFgr+kkGztWxCs+bakQIDAQABAoIBAQCwWoxLDYdCuZF+
+yKDaXeZKp/r4FeQ6g1VRpkZEnoIIl88SAOwVGc34ruscVwWQLxsgDHVtRROW0NF3
+sT8/7PjCEZQsoK7QeC9Wdyg/u1lomJzu7Km6qNh+l1K7QRpxsDcJwIYnPn0szikQ
+9GjTFYFGWINzdWRd1mCyfysmj7tulBhqniWesROAwsx3sm8KYLcfeTyCYMymyd+Q
+I5ztZleUgBpezyN8ejCGMca2u3ZEqNTMhYw9Qomye7/5Im4hADfINSzR/BeFAVR0
+OEHBDP3dL6bvsq8uLaf2GnQSf++qWGHseSYVjMQZnXJmiDU8fOli83pnHad6MuqB
+d2qsjuB5AoGBAPmjBQw5p+KykJeVCU4Wsj2HP6TgS4gmLZzgOaPU3vV74AGBn1bj
+sBnNTXkQIHmGCh6d73JHpLk0TnzCKwRyiGNOrp+jCiPgKjoLRxz73XGnjK89wN2y
+fvNiri4PN+NKUU1DMj04xwxm8M6VUfaAKvZBThmqmHKXTd/j27LJ8IXvAoGBAMaN
+BsDSjRXk3GOh4Fzi/jklEJNVcICvPDggzCFsMt92cS1JPv8ENoSr5FgZrjxJKDp+
+CeLOgbuV8empz6+54rgimt9uteS7YPXSQOfpuRjNhJDxPzrg+Mok+TSvfduZ/u8Y
+4KQT1MNNyrYUcVLd06mKoMbSligBqqdCUbwGoyd/AoGBAM8glOqc2BC/yjsLXMof
+CMsGcicyN1mDG+uDHDA0Sr5yht2ZGIU2rAHsl3BwkhFixvi6YFd43FMS9GCNlrW8
+9i83tKod1CcKMt8wRlPlIsrPk2o/mcwY8z6sTQtIcz2yhxzNOV0UxAslSn6N5JDb
+rUnfy5Z+Nrk1k1bGL5778QafAoGAaxWQeNqWASLnwkyCB1bdqdBVukCwZpccMWFu
+9u+2GFN3AueoND3/cVqL0wA2uojyS2nCxzJ9QcDDMjTFsI7eulTflnXNYEm3J514
+KBwkGj5tqwaSBZ1kURHT3hhwFspddnLCZXvUmmkQVVd9LyY4jA4aXGEjXvxXH9Ji
+5rflst0CgYBGsIPj3nkZf4gl4MNjdyCjPK5dndRTekLhXEhhfNZnPcpNsb50b70x
+k04sFHN+MgwDJjSXM8wGijs50GcMnsPMxjvvTzwQvJuYmvxHrY8mk3CxskQrcv5X
+yOVhjSlTsePLw8RfTZcACvl5te+vtRO4haoIrkAWtq4cmNIOhBsCXA==
+-----END RSA PRIVATE KEY-----
+{{- end -}}
+
+{{- define "p5g.ca.crt" -}}
+-----BEGIN CERTIFICATE-----
+MIICsDCCAZgCCQDX9tn+oTRT7DANBgkqhkiG9w0BAQsFADAaMRgwFgYDVQQDDA9w
+NWctaW5zZWN1cmUtY2EwHhcNMjAwNzMwMTgxNDA0WhcNMzAwNjA4MTgxNDA0WjAa
+MRgwFgYDVQQDDA9wNWctaW5zZWN1cmUtY2EwggEiMA0GCSqGSIb3DQEBAQUAA4IB
+DwAwggEKAoIBAQDBnZtHFgb7mn/0T1qCc7UkQ9oFX3kIaYgYwG9XxcXlIJmbJpR+
+uc9PXhTA2ytsHe5YQZ73ZAnCn8rKPfBpcpEjHbHjswbkcAQK51F4CNJ2zRoDJWPp
+VVADXIbO8m4FhJQ4ZqZpVEnqCjKVdAwBd9T1p7ccpHkoDuIuZsKsORAx45tImJpw
+HZ3UA/XUiZ3Ji43kXbhFx31EBF3it1in1BbzZX89ouFrP7I+xwTpNtlI4DP+VUPF
+2t7byhBqJ3SxLzeCMCNrb5qwQJ2U1cde2GquE79Gox2dTymtXnkGEj3XpTFgR/dL
+OztiXWkdDMhWLEeJtGMWCv6SQbO1bEKz5tqRAgMBAAEwDQYJKoZIhvcNAQELBQAD
+ggEBAG3pnP0vorcHxNJ1IjhLDMmLQStlsojLCUBS5CdqpQ0wyjk/VxP95olLg2cu
+fi0EJp8tcAzfXi9JkDBgP7K29nO99oDwUc2Yfegjfmw1B5Nsau6ssMlZBkiESMGp
+rtS1e4+GGrl5huE7+mrcB8qj82+ZBVpUvKw5i0DlNwmdl9UFSzkk6JL4Sf5kB0s1
+MqqydqzeyPPvIkzA5A4bQjqWkeOpwNTHlSrezIQVxEUMN6d76NRqDbGqEfzohTCT
+yjBTIpkJ1Lhc3xOohxrg2vx6XunxOUqagwa5ToszKy6WLiOKzAQxR1gNITousa2L
+NpL7hZy09LtM/SG5GQO7F5XsoQg=
+-----END CERTIFICATE-----
+{{- end -}}
+
+{{- define "p5g.diameterSecret" -}}
+{{- $crt := genSignedCert .certName nil nil 730 .ca -}}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .secretName | quote}}
+  namespace: {{ .root.Release.Namespace }}
+  labels:
+    {{- include "p5g.labels" .root | nindent 4 }}
+data:
+  ca.pem: {{ .ca.Cert | b64enc }}
+  crt.pem: {{ $crt.Cert | b64enc }}
+  key.pem: {{ $crt.Key | b64enc }}
+{{ end -}}
+
+
+{{- $ca := genCA "p5g.diameter.ca" 730 -}}
+
+{{- range .Values.epcGroups -}}
+{{- $nameCTX := dict "root" $ "name" .name -}}
+{{- $certName := include "p5g.pgw.diameterName" $nameCTX -}}
+{{- $secretName := include "p5g.pgwName" $nameCTX }}
+{{ include "p5g.diameterSecret" (dict "certName" $certName "root" $ "secretName" $secretName "ca" $ca ) }}
+{{- $certName := include "p5g.mme.diameterName" $nameCTX -}}
+{{- $secretName := include "p5g.mmeName" $nameCTX }}
+{{ include "p5g.diameterSecret" (dict "certName" $certName "root" $ "secretName" $secretName "ca" $ca ) }}
+{{- end -}}
+
+
+
+

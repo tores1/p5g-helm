@@ -1,0 +1,27 @@
+{{/* Create name of sgw config. Takes the root context. This config is shared among all SGWs. */}}
+{{- define "p5g.sgw.configName" -}}
+{{- print (include "p5g.fullname" . ) "-sgw-conf-tmpl" -}}
+{{- end -}}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "p5g.sgw.configName" . | quote }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "p5g.labels" . | nindent 4 }}
+    epcNodeType: sgw
+data:
+  sgw.yaml: |
+    logger:
+      file: /var/log/open5gs/sgw.log
+
+    parameter:
+      no_ipv6: true
+
+    sgw:
+      gtpc:
+        dev: eth0
+      gtpu:
+        dev: eth0
+        advertise_addr: ${HOST_IP}

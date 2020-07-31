@@ -1,0 +1,51 @@
+# Default values for p5g.
+
+# Nodes where to place EPC Control and Payload nodes (MME, SGW, PGW)
+# Nodes have to be labeled with the label indicated by epcNodeLabel and with the value in epcGroups[name].\
+# Eg. for a redundant system the first node would be labeled with epcGroup: a and the second with epcGroup: b.
+# Pods for mme, sgw and pgw will be deployed to these nodes.
+
+epcNodeLabel: epcGroup
+
+epcGroups:
+  - name: "a"
+    mmeCode: 1
+  - name: "b"
+    mmeCode: 2
+
+# Common configuration for all mme's.
+mmeConfig:
+  gummei:
+    plmnId:
+      mcc: 208
+      mnc: 93
+    mmeGid: 2
+  tai:
+    plmnId:
+      mcc: 208
+      mnc: 93
+    tac: 1
+  security:
+    integrityOrder: "[ EIA1, EIA2, EIA0 ]"
+    cipheringOrder: "[ EEA0, EEA1, EEA2 ]"
+  networkName:
+    full: "p5g"
+    mmeNamePrefix: "mme" # the name will be appended with "-<epcGroups.name>"
+
+mongodb:
+  hostName: "worker1"
+  directory: "/mongodb-storage"
+
+webui:
+  loadBalancerIP: 192.168.1.250
+  # The default user name and password is: admin, 1423
+  
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
