@@ -1,0 +1,51 @@
+
+{{/* creates name of mme config. Parameter: see definition of $ctx below */}}
+{{- define "p5g.mme.configName" -}}
+{{- print (include "p5g.mmeName" .) "-config" -}}
+{{- end -}}
+
+{{- range .Values.epcGroups -}}
+{{- $ctx := dict "root" $ "name" .name -}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "p5g.mme.configName" $ctx | quote }}
+  namespace: {{ $.Release.Namespace }}
+  labels: 
+    {{- include "p5g.mmeLabels" $ctx | nindent 4}}
+data:
+  mme.yaml: |
+    logger:
+      file: /var/log/open5gs/mme.log
+    parameter:
+    mme:
+      freeDiameter: /config-files/mme-diameter.conf
+      s1ap:
+        dev: eth0
+      gtpc:
+        dev: eth0
+      gummei:
+        plmn_id:
+          mcc: {{ $.Values.mmeConfig.gummei.plmnId.mcc }}
+          mnc: {{ $.Values.mmeConfig.gummei.plmnId.mnc }}
+        mme_gid: {{ $.Values.mmeConfig.gummei.mmeGid }}
+        mme_code: {{ .mmeCode }}
+      tai:
+        plmn_id:
+          mcc: {{ $.Values.mmeConfig.tai.plmnId.mcc }}
+          mnc: {{ $.Values.mmeConfig.tai.plmnId.mnc }}
+        tac: {{ $.Values.mmeConfig.tai.tac }}
+      security:
+        integrity_order : {{ $.Values.mmeConfig.security.integrityOrder }}
+        ciphering_order : {{ $.Values.mmeConfig.security.cipheringOrder }}
+      network_name:
+        full: {{ $.Values.mmeConfig.networkName.full }}
+        mme_name: {{ print $.Values.mmeConfig.networkName.mmeNamePrefix "-" $ctx.name }}
+    sgw:
+      gtpc:
+        - name: {{ include "p5g.sgwName" $ctx | quote }}
+    pgw:
+      gtpc:
+        - name: {{ include "p5g.pgwName"  $ctx | quote }}
+{{ end -}}

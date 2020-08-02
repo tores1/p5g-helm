@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "p5g.fullname" . }}-files-from-templates
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "p5g.labels" . | nindent 4 }}
+data:
+  files-from-templates.sh: |
+    #!/bin/bash
+    if [ ! -d $TEMPLATE_DIR ]
+    then
+     >&2 echo $(date -u) [Error:] '$TEMPLATE_DIR'= $TEMPLATE_DIR is not a directory.
+     exit 1
+    fi
+    
+    if [ ! -d $CONFIG_DIR ]
+    then
+     >&2 echo [Error:] '$CONFIG_DIR'= $CONFIG_DIR is not a directory.
+     exit 1
+    fi
+    
+    for f in $TEMPLATE_DIR/*
+     do
+     if [ ! -f $f ]
+     then
+      >&2 echo [Error:] $f is not a file.
+     fi
+     envsubst < $f > $CONFIG_DIR/$(basename $f)
+    echo [Info:] From $f generating file $CONFIG_DIR/$(basename $f)
+    done 

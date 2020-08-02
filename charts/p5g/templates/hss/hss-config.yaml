@@ -1,0 +1,19 @@
+{{- define "p5g.hss.configName" -}}
+{{- (print (include "p5g.fullname" . ) "-hss-config" ) -}}
+{{- end -}}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "p5g.hss.configName" . | quote }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "p5g.hssLabels" . | nindent 4 }}
+data:
+  hss.yaml: |
+    db_uri: {{ include "p5g.mongodbURI" . }}
+    logger:
+      file: /var/log/open5gs/hss.log
+    parameter:
+    hss:
+      freeDiameter: /config-files/hss-diameter.conf

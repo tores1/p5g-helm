@@ -1,0 +1,85 @@
+{{/*
+Create PCRFs as a Deployment.
+There are two configuration files for PCRF; one for the application and
+one for diameter. The application configuration contains a reference to 
+the mongo database (single) instance. The Diameter configuration has a 
+reference to all PGW nodes deployed including their unique diameter names.
+The diameter configuration for the PCRF instances are the same as are the
+certificates.
+
+The pod contains an initcontainer that awaits the availability of the mongo
+database prior to starting the PCRF application to avoid errors on startup.
+*/}}
+
+{{- define "p5g.pcrfName" -}}
+{{- print (include "p5g.fullname" . ) "-pcrf" -}}
+{{- end -}}
+
+{{- define "p5g.pcrfLabels" -}}
+epcNodeType: pcrf 
+{{ include "p5g.labels" . }}
+{{- end -}}
+
+{{- define "p5g.pcrfSelectorLabels" -}}
+epcNodeType: pcrf
+{{ include "p5g.selectorLabels" . -}}
+{{- end -}}
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "p5g.pcrfName" . | quote }}
+  labels:
+    {{- include "p5g.pcrfLabels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "p5g.pcrfSelectorLabels" . | nindent 4 }}
+    epcNodeType: pcrf
+  ports:
+    - name: gx
+      port: 3868
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "p5g.pcrfName" . }}
+  labels:
+    {{- include "p5g.pcrfLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "p5g.pcrfSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "p5g.pcrfLabels" . | nindent 8 }}
+      annotations:
+        configChecksum: {{ cat (include (print $.Template.BasePath "/pcrf/pcrf-config.yaml") .) (include (print $.Template.BasePath "/pcrf/pcrf-diameter-config.yaml") .) | sha256sum }}
+    spec:
+      initContainers:
+        # Note: code-duplication with hss
+        - name: wait-for-mongodb
+          image: busybox:1.28.4
+          command: ['sh', '-c']
+          args:
+            - until nslookup {{ include "p5g.mongodbName" . }}; do echo [INFO] waiting for mongodb; sleep 2; done;
+      containers:
+        - name: pcrf
+          image: tores/open5gs:0.1.1-universal
+          command: ["open5gs-pcrfd", "-c", "/config-files/pcrf.yaml"]
+          volumeMounts:
+            - name: pcrf-config
+              mountPath: /config-files/pcrf.yaml
+              subPath: pcrf.yaml
+            - name: pcrf-diameter
+              mountPath: /config-files/pcrf-diameter.conf
+              subPath: pcrf-diameter.conf
+      volumes:
+        - name: pcrf-config
+          configMap:
+            name: {{ include "p5g.pcrf.configName" . }}
+        - name: pcrf-diameter
+          configMap:
+            name: {{ include "p5g.pcrf.diameterConfigName" . }}

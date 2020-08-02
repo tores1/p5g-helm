@@ -1,0 +1,133 @@
+{{/*
+Creates MMEs for each entry in .Values.epcGgroups.
+Each MME is created as a unique service and will be deployed to the node with the matching
+label (using nodeSelector).
+This label is defined as follows:
+  - The label name is .Value.epcNodeLabel
+  - The vale of the label is .Value.epcGroups.name
+There are two configuration files. One for the application and one for diameter.
+The application config file is unique for each instance of the MME as it contains eg.
+instance specfic mme ID's (which are auto-generated to ensure uniqueness). The other
+MME parameters are generated from the values.yaml file except the PGW's and SGW's.
+The PGW and SGW listed in the configuration are deployed on the same node as the MME.
+
+The diameter configuration is unique for each instance of the MME as it contains a
+unique diameter id for connecting to the HSS instances behind the cluster service. 
+As each instance of the MME has a uniuqe diameter ID, a separte set of certificates
+are generated for each instance of the MME. These certificates are not used for 
+TLS negotiaion only to enable the freeDiameter application to start.
+
+The pod spec contains configChecksum annotations which will force a pod upgrade
+in case the configuartion files change.
+
+An initcontainer is used to ensure that the HSS, PGW and SGW are all running before
+the MME application starts to avoid errors during the startup phase.
+*/}}
+
+{{/* Creates name of mme. Parameter: see definition of $ctx below */}}
+{{- define "p5g.mmeName" -}}
+{{- print (include "p5g.fullname" .root) "-mme-" .name -}}
+{{- end -}}
+
+{{/* create labels. Parameter: see definition of $ctx below */}}
+{{- define "p5g.mmeLabels" -}}
+epcNode: "mme- {{- .name }}"
+epcNodeType: "mme"
+epcGroup: {{ .name | quote }}
+{{ include "p5g.labels" .root }}
+{{- end -}}
+
+{{/* create labels. Parameter: see definition of $ctx below */}}
+{{- define "p5g.mmeSelectorLabels" -}}
+{{ include "p5g.selectorLabels" .root }}
+epcNode: "mme- {{- .name }}"
+{{- end -}}
+
+{{- range .Values.epcGroups -}}
+{{- $ctx := dict "root" $ "name" .name -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "p5g.mmeName" $ctx | quote }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "p5g.mmeLabels" $ctx | nindent 4}}
+spec:
+  selector:
+    {{- include "p5g.mmeSelectorLabels" $ctx | nindent 4}}
+  clusterIP: None
+  ports:
+    - name: s6a
+      protocol: TCP
+      port: 3868
+    - name: gtp-c
+      protocol: UDP
+      port: 2123
+    - name: s1ap
+      protocol: SCTP
+      port: 36412
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "p5g.mmeName" $ctx | quote }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "p5g.mmeLabels" $ctx | nindent 4}}
+spec:
+  replicas: 1
+  serviceName: {{ include "p5g.mmeName" $ctx | quote }}
+  selector:
+    matchLabels:
+      {{- include "p5g.mmeSelectorLabels" $ctx | nindent 6}}
+  template:
+    metadata:
+      labels:
+        {{- include "p5g.mmeLabels" $ctx | nindent 8}}
+      annotations:
+        configChecksum1: {{ include (print $.Template.BasePath "/mme/mme-config.yaml") $ | sha256sum }}
+        configChecksum2: {{ include (print $.Template.BasePath "/mme/mme-diameter-config.yaml") $ | sha256sum }}
+    spec:
+      nodeSelector:
+        {{ $.Values.epcNodeLabel }}: "{{ .name }}"
+      initContainers:
+        - name: wait-for-deps
+          image: busybox:1.28.4 # solve issue with nslookup
+          command: ['sh', '-c']
+          args:
+            {{- $sgwName := include "p5g.sgwName" $ctx -}}
+            {{- $pgwName := include "p5g.pgwName" $ctx -}}
+            {{- $hssName := include "p5g.hssName" $ }}
+            - until nslookup {{ $sgwName }}; do echo [INFO] Waiting for {{ $sgwName }}; sleep2; done;
+              until nslookup {{ $pgwName }}; do echo [INFO] Waiting for {{ $pgwName }}; sleep2; done;
+              until nslookup {{ $hssName }}; do echo [INFO] Waiting for {{ $hssName }}; sleep2; done;
+      containers:
+        - name: mme
+          image: tores/open5gs:0.1.1-universal
+          command: ["open5gs-mmed", "-c", "/config-files/mme.yaml"]
+          volumeMounts:
+            - name: mme-config
+              mountPath: /config-files/mme.yaml
+              subPath: mme.yaml
+            - name: mme-diameter
+              mountPath: /config-files/mme-diameter.conf
+              subPath: mme-diameter.conf
+            - name: diameter-certs
+              mountPath: /config-files/certs
+          ports:
+            - name: s1ap
+              hostPort: 36412
+              protocol: SCTP
+              containerPort: 36412
+      volumes:
+        - name: mme-config
+          configMap:
+            name: {{ include "p5g.mme.configName" $ctx | quote }}
+        - name: mme-diameter
+          configMap:
+            name: {{ include "p5g.mme.diameterConfigName" $ctx | quote }}
+        - name: diameter-certs
+          secret:
+            secretName: {{ include "p5g.mmeName" $ctx | quote }}
+{{ end -}}

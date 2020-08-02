@@ -1,0 +1,22 @@
+{{- define "p5g.pcrf.configName" -}}
+{{- print (include "p5g.fullname" . ) "-pcrf-config" -}}
+{{- end -}}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "p5g.pcrf.configName" . | quote }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "p5g.pcrfLabels" . | nindent 4 }}
+data:
+  pcrf.yaml: |
+    db_uri: {{ include "p5g.mongodbURI" . }}
+
+    logger:
+      file: /var/log/open5gs/pcrf.log
+
+    parameter:
+
+    pcrf:
+      freeDiameter: /config-files/pcrf-diameter.conf

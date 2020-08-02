@@ -1,0 +1,28 @@
+{{- define "p5g.pgw.configName" -}}
+{{- (print (include "p5g.fullname" . ) "-pgw-config" ) -}}
+{{- end -}}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "p5g.pgw.configName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    epcNodeType: "pgw"
+    {{- include "p5g.labels" . | nindent 4}}
+data:
+  pgw.yaml: |
+    logger:
+        file: /var/log/open5gs/pgw.log
+    parameter:
+    pgw:
+        freeDiameter: /config-files/pgw-diameter.conf
+        gtpc:
+           dev: eth0
+        gtpu:
+           dev: eth0
+        ue_pool:
+          - addr: 100.64.0.0/10
+        dns:
+          $DNS_IP1
+          $DNS_IP2

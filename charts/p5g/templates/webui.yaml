@@ -1,0 +1,70 @@
+{{/*
+Creates the webUI application. It is assumed that a LoadBalancer is used.
+Ingress is FFS.
+*/}}
+
+{{/* Create name of webui. Parameter: $ */}}
+{{- define "p5g.webuiName" -}}
+{{- print (include "p5g.fullname" .) "-webui" -}}
+{{- end -}}
+
+{{/* Create webui labels. Parameter: $ */}}
+{{- define "p5g.webuiLabels" -}}
+httpApp: webui
+{{ include "p5g.labels" . }}
+{{- end -}}
+
+{{/* Create webui selectorlabels. Parameter: $ */}}
+{{- define "p5g.webuiSelectorLabels" -}}
+httpApp: webui
+{{ include "p5g.selectorLabels" . }}
+{{- end -}}
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "p5g.webuiName" . | quote }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "p5g.webuiLabels" . | nindent 4 }}
+spec:
+  ports:
+    - port: 80
+      targetPort: 3000
+      protocol: TCP
+  selector:
+    {{- include "p5g.webuiSelectorLabels" . | nindent 4 }}
+  type: LoadBalancer
+  loadBalancerIP: {{ .Values.webui.loadBalancerIP }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "p5g.webuiName" . | quote }}
+  labels:
+    {{- include "p5g.webuiLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "p5g.webuiSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "p5g.webuiLabels" . | nindent 8 }}
+    spec:
+      initContainers:
+        - name: wait-for-mongodb
+          image: busybox:1.28.4
+          command: ['sh', '-c']
+          args:
+            - until nslookup {{ include "p5g.mongodbName" . }}; do echo [INFO] waiting for mongodb; sleep 2; done;
+      containers:
+        - name: webui
+          image: tores/open5gs-webui:0.1.0
+          command: ["node", "server/index.js"]
+          env:
+            - name: DB_URI
+              value: {{ include "p5g.mongodbURI" . }}
+            - name: NODE_ENV
+              value: "production"

@@ -1,0 +1,169 @@
+{{/*
+Creates PGWs for each entry in .Values.epcGroups.
+Each PGW is considered as a unique service and will be deployed to the node with the matching
+label (using nodeSelector).
+This label is defined as follows:
+  - The label name is .Value.epcNodeLabel
+  - The value of the label is .Value.epcGroups.name  
+There are two configuration files; one for the application and another for diameter. The application
+config file is a template that is the same for all PGWs. The DNS names are updated dynamically by an 
+initContainer to point to the cluster DNS. The Diameter configuration file is unique for each 
+instance  of the PGW as each instance need to have its own unique diameter id for connecting to the 
+PCRF(s) sitting behind a proxy service. As each PGW has a uniuqe diameter id, a unique set of 
+certificates are generated (see diamter-certs.yaml).
+The POD contains configuration checksums that will cause the POD to be upgraded in case the configurations change.
+
+Currenly only the default APN is supported and each UE is assigned from the CG-NAT address space and then
+NAT-ed into the pod namespace.
+
+An initcontainer is used to wait for the PCRF service to become available to avoid crashes in the 
+PWG application container upon startup.
+*/}}
+
+{{/* Create the name for a PGW StatefulSet, its Service and serviceName */}}
+{{- define "p5g.pgwName" -}}
+{{- print  (include "p5g.fullname" .root) "-pgw-" .name -}}
+{{- end -}}
+
+{{/* Create the labels for PGW resources */}}
+{{- define "p5g.pgwLabels" -}}
+epcNode: "pgw- {{- .name }}"
+epcNodeType: "pgw"
+epcGroup: {{ .name | quote }}
+{{ include "p5g.labels" .root }}
+{{- end -}}
+
+{{/* Ceate the selector labels for PGW resources */}}
+{{- define "p5g.pgwSelectorLabels" -}}
+{{ include "p5g.selectorLabels" .root }}
+epcNode: "pgw- {{- .name }}"
+{{- end -}}
+
+{{- range .Values.epcGroups -}}
+{{- $ctx := dict "root" $ "name" .name -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "p5g.pgwName" $ctx | quote }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "p5g.pgwLabels" $ctx | nindent 4}}
+spec:
+  selector:
+    {{- include "p5g.pgwSelectorLabels" $ctx | nindent 4}}
+  clusterIP: None
+  ports:
+    - name: gtp-u
+      protocol: UDP
+      port: 2152
+    - name: gtp-c
+      protocol: UDP
+      port: 2123
+    - name: gx
+      port: 3868
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "p5g.pgwName" $ctx | quote }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "p5g.pgwLabels" $ctx | nindent 4 }}
+spec:
+  replicas: 1
+  serviceName: {{ include "p5g.pgwName" $ctx | quote }}
+  selector:
+    matchLabels:
+      {{- include "p5g.pgwSelectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "p5g.pgwLabels" $ctx | nindent 8 }}
+      annotations:
+        configChecksum1: {{ include (print $.Template.BasePath "/pgw/pgw-config.yaml") $ | sha256sum }}
+        configChecksum2: {{ include (print $.Template.BasePath "/pgw/pgw-diameter-config.yaml") $ | sha256sum }}
+    spec:
+      nodeSelector:
+        {{ $.Values.epcNodeLabel }}: "{{ .name }}"
+      initContainers:
+        - name: wait-for-pcrf
+          image: busybox:1.28.4 # solve issue with nslookup
+          command: ['sh', '-c']
+          args:
+            - until nslookup {{ include "p5g.pcrfName" $ }}; do echo [INFO] waiting for pcrf; sleep 2; done;
+        - name: make-config
+          image: tores/ubuntu-gettext:18.04
+          command: ["bash", "-c"]
+          args:
+            - export DNS_IP1=-\ $(cat /etc/resolv.conf | awk '/nameserver/ {print $2}');
+              export DNS_IP2="";
+              echo [INFO] dns ip 1 set to $DNS_IP1, dns ip 2 set to $DNS_IP2;
+              /config-script/files-from-templates.sh;
+          env:
+            - name: TEMPLATE_DIR
+              value: /config-templates
+            - name: CONFIG_DIR
+              value: /config-files
+          volumeMounts:
+            - name: config-files
+              mountPath: /config-files
+            - name: config-templates
+              mountPath: /config-templates
+              readOnly: true
+            - name: config-script
+              mountPath: /config-script
+              readOnly: true
+      containers:
+        - name: pgw
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN"]
+          image: tores/open5gs:0.1.1-universal
+          command: ["/bin/sh", "-c"]
+          args:
+            - mkdir -p /dev/net;
+              mknod /dev/net/tun c 10 200;
+              chmod 600 /dev/net/tun;
+              ip tuntap add name ogstun mode tun;
+              ip addr add 100.64.0.0/10 dev ogstun;
+              ip link set ogstun up;
+              iptables -t nat -F;
+              iptables -t nat -A POSTROUTING -s 100.64.0.0/10 ! -o ogstun -j SNAT --to-source $POD_IP;
+              echo [INFO] Networking for UEs are set up.;
+              open5gs-pgwd -c /config-files/pgw.yaml;
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: config-files
+              mountPath: /config-files/pgw.yaml
+              subPath: pgw.yaml
+            - name: pgw-diameter
+              mountPath: /config-files/pgw-diameter.conf
+              subPath: pgw-diameter.conf
+            - name: diameter-certs
+              mountPath: /config-files/certs
+
+      volumes:
+        - name: config-files
+          emptyDir: {}
+        - name: config-templates
+          configMap:
+            name: {{ include "p5g.pgw.configName" $ | quote }}
+        - name: pgw-diameter
+          configMap:
+            name: {{ include "p5g.pgw.diameterConfigName" $ctx | quote }}
+        - name: config-script
+          configMap:
+            name: files-from-templates
+            defaultMode: 0744
+        ## Insert certificates and keys only so that the freeDiameter application can start.
+        ## This is not intended to be used with TLS or any security function.
+        - name: diameter-certs
+          secret:
+            secretName: {{ include "p5g.pgwName" $ctx  | quote }}
+{{ end -}}

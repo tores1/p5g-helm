@@ -1,0 +1,37 @@
+{{/* Generate name of diameter config for mme. Parameter dict "root" [$.Value] "name" [name of epc group in values ] */}}
+{{- define "p5g.mme.diameterConfigName" -}}
+{{ print (include "p5g.mmeName" . ) "-diameter" }}
+{{- end -}}
+
+{{/* Generate diameter name of pgw node. Parameter: $.Value */}}
+{{- define "p5g.mme.diameterName" -}}
+{{- print (include "p5g.mmeName" .) ".localdomain" -}}
+{{- end -}}
+
+{{/* Generate diameter configuration for each mme */}}
+{{- range .Values.epcGroups -}}
+{{- $ctx := dict "root" $ "name" .name -}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "p5g.mme.diameterConfigName" $ctx | quote }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "p5g.mmeLabels" $ctx | nindent 4 }}
+data:
+  mme-diameter.conf: |
+    Identity = {{ include "p5g.mme.diameterName" $ctx | quote }};
+    Realm = "localdomain";
+    TLS_Cred = "/config-files/certs/crt.pem", "/config-files/certs/key.pem";
+    TLS_CA = "/config-files/certs/ca.pem";
+    LoadExtension = "/usr/lib/x86_64-linux-gnu/freeDiameter/dbg_msg_dumps.fdx" : "0x8888";
+    LoadExtension = "/usr/lib/x86_64-linux-gnu/freeDiameter/dict_rfc5777.fdx";
+    LoadExtension = "/usr/lib/x86_64-linux-gnu/freeDiameter/dict_mip6i.fdx";
+    LoadExtension = "/usr/lib/x86_64-linux-gnu/freeDiameter/dict_nasreq.fdx";
+    LoadExtension = "/usr/lib/x86_64-linux-gnu/freeDiameter/dict_nas_mipv6.fdx";
+    LoadExtension = "/usr/lib/x86_64-linux-gnu/freeDiameter/dict_dcca.fdx";
+    LoadExtension = "/usr/lib/x86_64-linux-gnu/freeDiameter/dict_dcca_3gpp.fdx";
+    {{/* Connect to pcrf through service with cluster IP. All instances of pcrf are identical. */}}
+    ConnectPeer = "hss.localdomain" { ConnectTo = {{ include "p5g.hssName" $ | quote }}; No_TLS; No_SCTP; };
+{{ end -}}

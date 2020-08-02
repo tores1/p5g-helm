@@ -1,0 +1,21 @@
+{{- define "p5g.mongodb.PVCName" -}}
+{{- (print (include "p5g.fullname" . ) "-mongodb-pvc" ) -}}
+{{- end -}}
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "p5g.mongodb.PVCName" . | quote }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    db: mongodb
+    {{- include "p5g.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 100M
+  storageClassName: node-disk
+  volumeName: {{ include "p5g.mongodb.PVName" .  | quote }}
