@@ -1,4 +1,12 @@
 {{/* vim: set filetype=mustache: */}}
+
+{{/*
+Generate the URI for mongodb. Context must be the root $ contect 
+*/}}
+{{- define "p5g.mongodbURI" -}}
+{{- print "mongodb://" .Values.mongodb.fqdn .Values.mongodb.path -}}
+{{- end }}
+
 {{/*
 Expand the name of the chart.
 */}}

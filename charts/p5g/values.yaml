@@ -45,8 +45,10 @@ mmeConfig:
     mmeNamePrefix: "mme" # the name will be appended with "-<epcGroups.name>"
 
 mongodb:
-  hostName: "worker1"
-  directory: "/mongodb-storage"
+  #  hostName: "worker1"
+  # directory: "/mongodb-storage"
+  fqdn: ...
+  path: /open5gs
 
 webui:
   loadBalancerIP: 192.168.1.250

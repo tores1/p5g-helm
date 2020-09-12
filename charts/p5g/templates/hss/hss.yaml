@@ -63,7 +63,7 @@ spec:
           image: busybox:1.28.4 # solve issue with nslookup
           command: ['sh', '-c']
           args:
-            - until nslookup {{ include "p5g.mongodbName" . }}; do echo [INFO] waiting for mongodb; sleep 2; done;
+            - until nslookup {{ .Values.mongodb.fqdn }}; do echo [INFO] waiting for mongodb; sleep 2; done;
       containers:
         - name: hss
           image: tores/open5gs:0.1.1-universal
