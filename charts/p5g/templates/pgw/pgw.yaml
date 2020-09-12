@@ -20,6 +20,13 @@ An initcontainer is used to wait for the PCRF service to become available to avo
 PWG application container upon startup.
 */}}
 
+{{/* Ensure that the values.yaml file has valid information */}}
+{{- if eq .Values.ueSettings.uePayloadTermination "pod" -}}
+{{- else if eq .Values.ueSettings.uePayloadTermination "node" -}}
+{{- else -}}
+{{- fail ".Values.ueSettings.uePayloadTermination must be either pod or node" -}}
+{{- end -}}
+
 {{/* Create the name for a PGW StatefulSet, its Service and serviceName */}}
 {{- define "p5g.pgwName" -}}
 {{- print  (include "p5g.fullname" .root) "-pgw-" .name -}}
@@ -85,6 +92,12 @@ spec:
         configChecksum1: {{ include (print $.Template.BasePath "/pgw/pgw-config.yaml") $ | sha256sum }}
         configChecksum2: {{ include (print $.Template.BasePath "/pgw/pgw-diameter-config.yaml") $ | sha256sum }}
     spec:
+      {{- if ne $.Values.ueSettings.uePayloadTermination "node" }}
+      securityContext:
+        sysctls:
+          - name: net.ipv4.ip_forward
+            value: "1"
+      {{- end }}
       nodeSelector:
         {{ $.Values.epcNodeLabel }}: "{{ .name }}"
       initContainers:
@@ -97,8 +110,13 @@ spec:
           image: tores/ubuntu-gettext:18.04
           command: ["bash", "-c"]
           args:
+            {{- if ne $.Values.ueSettings.uePayloadTermination "node" }}
             - export DNS_IP1=-\ $(cat /etc/resolv.conf | awk '/nameserver/ {print $2}');
               export DNS_IP2="";
+            {{- else }}
+            - export DNS_IP1=-\ {{ index $.Values.ueSettings.ueDns 0 }};
+              export DNS_IP2=-\ {{ index $.Values.ueSettings.ueDns 1 }};
+            {{- end }}
               echo [INFO] dns ip 1 set to $DNS_IP1, dns ip 2 set to $DNS_IP2;
               /config-script/files-from-templates.sh;
           env:
@@ -118,20 +136,34 @@ spec:
       containers:
         - name: pgw
           securityContext:
+            {{- if eq $.Values.ueSettings.uePayloadTermination "node" }}
+            privileged: true
+            {{- end }}
             capabilities:
               add: ["NET_ADMIN"]
           image: tores/open5gs:0.1.1-universal
           command: ["/bin/sh", "-c"]
           args:
+              {{- if ne $.Values.ueSettings.uePayloadTermination "node" }}
             - mkdir -p /dev/net;
               mknod /dev/net/tun c 10 200;
               chmod 600 /dev/net/tun;
               ip tuntap add name ogstun mode tun;
               ip addr add 100.64.0.0/10 dev ogstun;
               ip link set ogstun up;
+              {{ else }}
+            - ip tuntap add name ogstun mode tun;
+              ip addr add 100.64.0.0/10 dev ogstun;
+              ip link set ogstun up;
+              {{- end }}
+              {{- if ne $.Values.ueSettings.uePayloadTermination "node" -}}
               iptables -t nat -F;
               iptables -t nat -A POSTROUTING -s 100.64.0.0/10 ! -o ogstun -j SNAT --to-source $POD_IP;
-              echo [INFO] Networking for UEs are set up.;
+              {{- else }}
+              sh -c "echo 1 > /proc/sys/net/ipv4/ip_forward";
+              iptables -t nat -A POSTROUTING -s 100.64.0.0/10 ! -o ogstun -j MASQUERADE;
+              {{- end }}
+              echo [INFO] Networking for UEs is set up.;
               open5gs-pgwd -c /config-files/pgw.yaml;
           env:
             - name: POD_IP

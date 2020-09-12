@@ -13,6 +13,18 @@ epcGroups:
   - name: "b"
     mmeCode: 2
 
+# ueSettings determine how UE traffic is terminated. There are two modes; "node" or "pod". If "node" is selected
+# the UE payload will be NATed using the node IP as the source. If "pod" is selected, the UE traffic will be
+# NATed using the pgw POD IP as the source and the UE DNS will be the k8s DNS server.
+# Note: in the case uePayloadTermination is set to node, the pgw will be greated as a privileged container.
+# Note: in the case uePayloadTermination is set to pod, the pgw will need to have spec.securityContext.sysctls
+# set to enable forwarding. In kubernetes 1.18 there is a bug preventing this from working.
+ueSettings:
+  uePayloadTermination: node # node or pod
+  ueDns:                     # only needed when uePayloadTermination=node if uePayloadTermination=pod then the k8s DNS service will be used
+    - 8.8.8.8
+    - 8.8.4.4
+
 # Common configuration for all mme's.
 mmeConfig:
   gummei:
