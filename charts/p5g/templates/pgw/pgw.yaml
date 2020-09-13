@@ -191,7 +191,7 @@ spec:
             name: {{ include "p5g.pgw.diameterConfigName" $ctx | quote }}
         - name: config-script
           configMap:
-            name: files-from-templates
+            name: {{ include "p5g.template-generator" $ }}
             defaultMode: 0744
         ## Insert certificates and keys only so that the freeDiameter application can start.
         ## This is not intended to be used with TLS or any security function.

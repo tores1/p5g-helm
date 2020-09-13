@@ -121,5 +121,5 @@ spec:
             name: {{ include "p5g.sgw.configName" $ | quote }}
         - name: config-script
           configMap:
-            name: files-from-templates
+            name: {{ include "p5g.template-generator" $ | quote }}
 {{ end }}

@@ -1,7 +1,11 @@
+{{- define "p5g.template-generator" -}}
+{{- print (include "p5g.fullname" . ) "-template-generator" -}}
+{{- end -}}
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "p5g.fullname" . }}-files-from-templates
+  name: {{ include "p5g.template-generator" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "p5g.labels" . | nindent 4 }}

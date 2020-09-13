@@ -47,7 +47,7 @@ mmeConfig:
 mongodb:
   #  hostName: "worker1"
   # directory: "/mongodb-storage"
-  fqdn: ...
+  fqdn: p5g-mongodb
   path: /open5gs
 
 webui:

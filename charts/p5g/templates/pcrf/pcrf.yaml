@@ -64,7 +64,7 @@ spec:
           image: busybox:1.28.4
           command: ['sh', '-c']
           args:
-            - until nslookup {{ .Values.mongdob.fqdn . }}; do echo [INFO] waiting for mongodb; sleep 2; done;
+            - until nslookup {{ .Values.mongodb.fqdn }}; do echo [INFO] waiting for mongodb; sleep 2; done;
       containers:
         - name: pcrf
           image: tores/open5gs:0.1.1-universal
